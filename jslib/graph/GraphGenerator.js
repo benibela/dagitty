@@ -64,11 +64,11 @@ var GraphGenerator = {
 				p["max"+prop[i]] = vertices.length - minOthers
 		}
 		var pSource = p.pSource ? p.pSource : 0, 
-				pTarget = p.pTarget ? p.pTarget : 0, 
-				pLatentNode = p.pLatentNode ? p.pLatentNode : 0;
-		var maxSource = p.maxSource ? p.maxSource : vertices.length,
-			maxTarget = p.maxTarget ? p.maxTarget : vertices.length,
-			maxLatentNode = p.maxLatentNode ? p.maxLatentNode : vertices.length
+			pTarget = p.pTarget ? p.pTarget : 0, 
+			pLatentNode = p.pLatentNode ? p.pLatentNode : 0
+		var maxSource = "maxSource" in p ? p.maxSource : vertices.length,
+			maxTarget = "maxTarget" in p ? p.maxTarget : vertices.length,
+			maxLatentNode = "maxLatentNode" in p ? p.maxLatentNode : vertices.length
 		
 		var counts = {"Source": 0, "Target": 0, "LatentNode": 0}
 		var availableVertices = []

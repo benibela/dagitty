@@ -1,20 +1,52 @@
-/* 
- * This is a namespace containing various methods that analyze a given
- * graph. These methods to not change the graph. 
- * 
- */
-
 /* globals _,Graph,GraphAnalyzer,Hash */
 /* exported GraphTransformer */
 
+/** Namespace containing various methods that analyze a given 
+ * graph. These methods to not change the input graph; instead they
+ * return a new graph.
+ * @namespace GraphTransformer
+ */
+
 var GraphTransformer = {
 	
-	/**
+	/** Transforms an arbitrary graph into its 'line graph'. The line graph
+	  * of a graph G contains a node for each edge x->y in G, and an edge 
+	  * (x->y,y->z) for each path x -> y -> z in G. 
+	  *  
+	  * @summary Line digraph (edge-vertex dual graph).
+	  * @param g Input graph. Can have any type, but only simple directed edges
+	  * (Graph.Edgetype.Directed) are taken into account. 
+	  */
+	lineDigraph : function( g ){
+		var gn= new Graph()
+		_.each( g.getEdges(), function(e){
+			if( e.directed == Graph.Edgetype.Directed ){
+				gn.addVertex( new Graph.Vertex( {id:(e.id || (e.v1.id+e.v2.id))} ) )
+			}
+		})
+		_.each( g.getVertices(), function(v){
+			var vp = v.getParents()
+			var vc = v.getChildren()
+			_.each( vp, function(p){
+				var ep = g.getEdge( p, v, Graph.Edgetype.Directed )
+				var vpn = gn.getVertex(  ep.id || (ep.v1.id+ep.v2.id) )
+				_.each( vc, function(c){
+					var ec = g.getEdge( v, c, Graph.Edgetype.Directed )
+					var vcn = gn.getVertex(  ec.id || (ec.v1.id+ec.v2.id) )
+					gn.addEdge( vpn, vcn, Graph.Edgetype.Directed )
+				})
+			})
+		})
+		return gn
+	},
+
+	/** 
 	 *  Forms the subgraph of this graph consisting of the vertices in "vertex_array" 
 	 *  and the edges between them, directed or undirected.
 	 *  
 	 *  If "vertex_array" contains source and/or target, source and/or target of the
-	 *  returned graph are set accordingly. */
+	 *  returned graph are set accordingly. 
+	 */
 	inducedSubgraph : function( g, vertex_array ){
 		var gn = new Graph(), i
 		
@@ -34,6 +66,55 @@ var GraphTransformer = {
 		
 		g.copyAllPropertiesTo( gn )
 		return gn
+	},
+
+	mergeGraphs : function(){
+		var i, j, gn = new Graph(), vv, ee
+		for( i = 0 ; i < arguments.length ; i ++ ){
+			vv = arguments[i].getVertices()
+			for( j = 0 ; j < vv.length ; j++ ){
+				if( !gn.getVertex( vv[j].id ) ){
+					gn.addVertex( new Graph.Vertex( vv[j] ) )
+				}
+			}
+			ee = arguments[i].edges
+			for( j = 0 ; j < ee.length ; j++ ){
+				gn.addEdge( ee[j].v1.id, ee[j].v2.id, ee[j].directed )
+			}
+			arguments[i].copyAllPropertiesTo( gn )
+		}
+		return gn
+	},
+
+	structuralPart : function( g ){
+		return GraphTransformer.inducedSubgraph( g, g.getLatentNodes() ) 
+	},
+
+	measurementPart : function( g ){
+		var gn = new Graph(), i, vv = g.getVertices()
+		for( i = 0 ; i < vv.length ; i++ ){
+			gn.addVertex( new Graph.Vertex( vv[i] ) )
+		}
+		for( i = 0 ; i < g.edges.length ; i++ ){
+			var e = g.edges[i]
+			if( e.directed == Graph.Edgetype.Directed &&
+				!g.isLatentNode(e.v2) ){
+				gn.addEdge( e.v1.id, e.v2.id, e.directed )
+			}
+			if( e.directed == Graph.Edgetype.Bidirected &&
+				!g.isLatentNode(e.v1) && !g.isLatentNode(e.v2) ){
+				gn.addEdge( e.v1.id, e.v2.id, e.directed )
+			}
+		}
+		g.copyAllPropertiesTo( gn )
+		// remove isolated latent nodes from measurement model
+		vv = _.pluck(gn.getLatentNodes(),"id")
+		for( i = 0 ; i < vv.length ; i++ ){
+			if( gn.getVertex(vv[i]).degree( Graph.Edgetype.Directed ) == 0 ) {
+				gn.deleteVertex(gn.getVertex(vv[i]))
+			}
+		}
+		return gn		
 	},
 	
 	skeleton : function( g ){
@@ -73,13 +154,12 @@ var GraphTransformer = {
 	},
 	
 	/**
-	 *		Constructs and returns the subgraph of g consisting of 
-	 *			(a) the source s and its ancestors
-	 *			(b) the target t and its ancestors
-	 *			(c) all adjusted/selection nodes Z and their ancestors
-	 *
-	 *		Otherwise, if V is provided, the ancestors of those nodes are 
-	 *		returned.
+	 * Constructs and returns the subgraph of g consisting of 
+	 * (a) the source s and its ancestors;
+	 * (b) the target t and its ancestors;
+	 * (c) all adjusted/selection nodes Z and their ancestors.
+	 * Otherwise, if V is provided, the ancestors of those nodes are 
+	 * returned.
 	 */
 	ancestorGraph : function( g, V ){ 
 		if( arguments.length < 2 ){
@@ -93,9 +173,9 @@ var GraphTransformer = {
 	},
 	
 	/***
-	 *		This is a slightly different version of Judea Pearl's BackDoor
-	 *		construction. Only such edges are deleted that are the first edge of a 
-	 *      proper causal path.
+	 * This is a slightly different version of Judea Pearl's BackDoor
+	 * construction. Only such edges are deleted that are the first edge of a 
+	 * proper causal path.
 	 *
 	 *		Parameters X and Y are source and target vertex sets, respectively,
 	 *		and are optional.
@@ -203,8 +283,8 @@ var GraphTransformer = {
 				g.clearTraversalInfo()
 				_.each( adj, function(v){ Graph.Vertex.markAsVisited(v) } )
 			} ), function(v){
-				reaches_source[v.id] = true
-			})
+			reaches_source[v.id] = true
+		})
 			
 		_.each( g.ancestorsOf( g.getAdjustedNodes() ), function(v){
 			reaches_adjusted_node[v.id] = true
@@ -447,6 +527,8 @@ var GraphTransformer = {
 			if( ee[i].directed == 2 ){ // bidirected edge
 				vup = up_prefix+ee[i].v1.id; vdown = down_prefix+ee[i].v2.id
 				n.addEdge( vup, vdown )
+				vup = up_prefix+ee[i].v2.id; vdown = down_prefix+ee[i].v1.id
+				n.addEdge( vup, vdown )
 			}
 		} 
 		for( i = 0 ; i < vv.length ; i ++ ){
@@ -571,16 +653,16 @@ var GraphTransformer = {
 	},
 	
 	/**
-	 *		Constructs a flow network corresponding to the given directed graph.
-	 *		A flow network is a tuple of a graph and a capacity function.
+	 * Constructs a flow network corresponding to the given directed graph.
+	 * A flow network is a tuple of a graph and a capacity function.
 	 * 
-	 *		Capacities for certain edge may be given as an argument. If not provided,
-	 *		all edges will be initialized to have capacity 1.
+	 * Capacities for certain edge may be given as an argument. If not provided,
+	 * all edges will be initialized to have capacity 1.
 	 * 
-	 *		Two new 'supernodes' will be created for source(s) and target(s) to allow
-	 *		for multi source / sink flow problems. The default names for these new
-	 *		vertices are  "__SRC" and  "__SNK" ; underscores will be prepended as necessary
-	 *		if this conflics with existing vertex names. 
+	 * Two new 'supernodes' will be created for source(s) and target(s) to allow
+	 * for multi source / sink flow problems. The default names for these new
+	 * vertices are  "__SRC" and  "__SNK" ; underscores will be prepended as necessary
+	 * if this conflics with existing vertex names. 
 	 */
 	flowNetwork : function(g, capacities) {
 		var i, v, vin, vout
@@ -632,12 +714,12 @@ var GraphTransformer = {
 		return { graph: n, capacities: capacities }
 	},
 	
-	/****
-	 *		Applies a well-known tranformation to turn a vertex capacity flow problem into 
-	 *		an edge capacity flow problem: Each vertex v in the given graph is substituted by
-	 *		a vertex pair v_in -> v_out where the edge capacity is the given vertex capacity.
-	 *		All edges going into v are connected to v_in and all edges going out of v are connected
-	 *		to v_out.
+	/***
+	 * Applies a well-known tranformation to turn a vertex capacity flow problem into 
+	 * an edge capacity flow problem: Each vertex v in the given graph is substituted by
+	 * a vertex pair v_in -> v_out where the edge capacity is the given vertex capacity.
+	 * All edges going into v are connected to v_in and all edges going out of v are connected
+	 * to v_out.
 	 **/
 	vertexCapacityGraph : function( g ) {
 		var gn = new Graph()
@@ -658,7 +740,7 @@ var GraphTransformer = {
 		_.each(g.edges,function( e ){
 			if( e.v1 !== g.getTarget() && e.v2 !== g.getSource() ){
 				gn.addEdge( new Graph.Edge.Directed( { v1 : gn.getVertex("O"+e.v1.id),
-							v2 : gn.getVertex("I"+e.v2.id) , capacity: 1, is_backedge : false } ) )
+					v2 : gn.getVertex("I"+e.v2.id) , capacity: 1, is_backedge : false } ) )
 				gn.addEdge( new Graph.Edge.Directed( { 
 					v2 : gn.getVertex("O"+e.v1.id),
 					v1 : gn.getVertex("I"+e.v2.id), 
@@ -914,6 +996,13 @@ var GraphTransformer = {
 		return gn
 	},
 
+	contractLatentNodes: function(g){
+		var gn = g.clone()
+		_.each( gn.getLatentNodes(), function (v) {
+			gn.contractVertex(v)
+		} )
+		return gn
+	},
 	
 	markovEquivalentDags : function(g,n){
 		var c = this.dagToCpdag(g)
