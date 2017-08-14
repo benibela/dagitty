@@ -54,14 +54,14 @@ output.once('open', function(fd) {
   var finalbuffer = [];
   function myFlush(){
     output.write(buffer.join(""));
-    buffer = "";
+    buffer = [];
     bufferlen = 0;
   }
   function myWriteLine(line){
     buffer.push(line);
     buffer.push("\n");
     bufferlen += line.length + 1;
-    if (bufferlen > 1000*1024) myFlush;
+    if (bufferlen > 1000*1024) myFlush();
   }
   
   
